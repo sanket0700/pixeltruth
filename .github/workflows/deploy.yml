@@ -115,6 +115,14 @@ jobs:
           # require the SEO push and real traffic that don't exist yet
           # (SEO is explicitly paused pending the Hive ToS situation).
           # Revisit when the SEO push actually resumes.
+          #
+          # --service-account: without this, Cloud Run silently runs the
+          # container as the default compute SA, which GCP auto-grants
+          # roles/editor - found by checking, not assuming, and it's a real
+          # gap for an app that parses untrusted uploaded images through a
+          # native addon. pixeltruth-runtime (infra/runtime.tf) has only
+          # roles/datastore.user, the actual ceiling of what the app needs.
+          flags: --service-account=pixeltruth-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Show deployed URL
         run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

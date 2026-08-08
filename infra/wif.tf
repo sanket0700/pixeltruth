@@ -67,11 +67,9 @@ resource "google_project_iam_member" "deployer_artifact_writer" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-resource "google_project_iam_member" "deployer_sa_user" {
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.deployer.email}"
-}
+# iam.serviceAccountUser is granted in runtime.tf, scoped to only the
+# specific runtime SA - not here at project level, which would let this
+# account act as *any* SA in the project, including pixeltruth-infra.
 
 # --- Infra service account (used by .github/workflows/terraform.yml) ---
 
