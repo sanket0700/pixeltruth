@@ -25,6 +25,17 @@ permissions:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    # Dependabot-triggered runs don't get repository secrets at all (a
+    # GitHub platform default, confirmed by a real failed run here, not
+    # assumed - the same restriction deploy.yml's ci job hit). Unlike that
+    # job, there's no way to make terraform plan itself work without real
+    # GCP credentials - it has to read actual remote state - so the whole
+    # job is skipped rather than guaranteed-failing on every Dependabot PR
+    # that touches infra/**. Those PRs then show no plan check at all (same
+    # as any PR whose changes don't hit this workflow's path filter), and
+    # get reviewed manually before merge - which a Terraform provider
+    # version bump warrants anyway.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v4
 
