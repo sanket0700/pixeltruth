@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      # One PR for routine bumps instead of a dozen - security-relevant
+      # major-version jumps still get their own PR since they're excluded
+      # from the "patch/minor" grouping below.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: terraform
+    directory: "/infra"
+    schedule:
+      interval: weekly
