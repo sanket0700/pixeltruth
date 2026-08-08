@@ -1,4 +1,6 @@
-# C2PA test fixtures
+# Detection test fixtures
+
+## C2PA fixtures
 
 Pulled from [contentauth/c2pa-rs](https://github.com/contentauth/c2pa-rs)'s
 `sdk/tests/fixtures/` (dual MIT/Apache-2.0), used as-is for testing
@@ -9,3 +11,27 @@ Pulled from [contentauth/c2pa-rs](https://github.com/contentauth/c2pa-rs)'s
 - `E-sig-CA.jpg` - deliberately broken claim signature
   (`claimSignature.mismatch`).
 - `no_manifest.jpg` - a plain photo with no C2PA data at all.
+
+## Known-AI fixtures (for communityForensics.test.ts)
+
+Both from Wikimedia Commons, license verified directly via the Commons API
+(`action=query&prop=imageinfo&iiprop=extmetadata`) before committing, not
+assumed:
+
+- `midjourney-known-ai.jpg` ("'Greenwood Estates Vista City' by
+  Midjourney.jpg") - CC0/public domain. Scores ~0.99 - the reliable
+  "should score high" fixture.
+- `dalle2-known-ai.jpg` ("DALL-E 2 artificial intelligence digital image
+  generated photo.jpg") - public domain. Scores ~0.32 - **a real, known
+  miss** (should classify as AI-generated and doesn't, at this
+  resolution/compression). Kept deliberately, not swapped out for an
+  easier example: it's real evidence for the product's own stated caveat
+  that accuracy drops for recompressed/re-shared images, and a regression
+  fixture if the model or preprocessing ever changes.
+
+Both are the *original* resolution as downloaded - resizing them down
+(tried during development) measurably changed the scores, in one case
+flipping the dalle2 image from a miss to a correct classification and in
+the other dropping the midjourney image's confidence from ~0.99 to ~0.82 -
+real evidence of exactly the sensitivity these fixtures are meant to
+document, but bad for stable test assertions, hence keeping originals.

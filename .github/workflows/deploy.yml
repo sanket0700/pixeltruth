@@ -54,24 +54,36 @@ jobs:
       # fixtures, which needs the real ONNX model present - the model
       # bucket is private (see infra/models.tf), so this job needs its own
       # GCP auth even though it never touches Cloud Run/Artifact Registry.
-      - id: auth
+      #
+      # Skipped for Dependabot: GitHub doesn't pass repository secrets to
+      # Dependabot-triggered runs at all (a platform security default, not
+      # something fixable from this side) - confirmed by a real failed run
+      # here, not assumed. The model-dependent tests themselves check for
+      # the model file and skip (not fail) when it's absent, so Dependabot
+      # still gets a real, green signal on everything else (lint, the rest
+      # of the suite, build) rather than a permanently red PR it can never
+      # fix by itself.
+      - if: github.actor != 'dependabot[bot]'
+        id: auth
         uses: google-github-actions/auth@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - if: github.actor != 'dependabot[bot]'
+        uses: google-github-actions/setup-gcloud@v2
 
       # Cached by content hash - the model doesn't change on every commit,
       # no reason to re-download 87MB on every single push/PR.
-      - uses: actions/cache@v4
+      - if: github.actor != 'dependabot[bot]'
+        uses: actions/cache@v4
         id: model-cache
         with:
           path: models/commfor-384.onnx
           key: commfor-384-v1
 
-      - if: steps.model-cache.outputs.cache-hit != 'true'
+      - if: github.actor != 'dependabot[bot]' && steps.model-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p models
           gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v1.onnx models/commfor-384.onnx
