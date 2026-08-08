@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PixelTruth
 
-## Getting Started
+Paste an image, get an AI-generation likelihood check. No account needed.
 
-First, run the development server:
+A free, single-player tool - not a social network. The growth thesis: real
+standalone utility plus a naturally shareable result, rather than needing
+an existing audience to have any value at all. See the sibling project
+[`kaleido`](../kaleido) for the (now-secondary) B2B provenance-check pilot
+this is meant to eventually fund.
+
+## Stack
+
+- **Next.js 16** (App Router, TypeScript, Tailwind CSS)
+- **Hive Moderation API** - AI-generation likelihood scoring (v1; a
+  self-hosted detector is a deliberate later phase, not a v1 requirement)
+- **c2pa-js** - Content Credentials / C2PA manifest verification
+- **Cloud Firestore** - rate-limit counters and minimal result records
+  only; no images are ever persisted
+- **Cloud Run** - hosting (Google Cloud free tier)
+
+No accounts, no Firebase Auth, no Cloud Storage - uploaded images are
+processed transiently and discarded.
+
+## Local development
 
 ```bash
+npm install
+firebase emulators:start   # Firestore only
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copy `.env.local.example` to `.env.local` and fill in `HIVE_API_KEY` (never
+committed - server-only, never sent to the client).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pushes to `main` build a container and deploy to Cloud Run via GitHub
+Actions (`.github/workflows/deploy.yml`), gated behind a CI check
+(lint/test/build) - same GitHub Flow pattern as `kaleido`.
