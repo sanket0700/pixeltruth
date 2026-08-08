@@ -108,14 +108,18 @@ resource "google_project_iam_member" "infra_roles" {
 }
 
 # Terraform state lives in a bucket created out-of-band during bootstrap
-# (see infra/README.md) - the infra SA needs read/write on it specifically
-# to run `terraform plan`/`apply` from CI at all.
-data "google_storage_bucket" "tfstate" {
-  name = "pixeltruth-0700-tfstate"
-}
-
+# (see infra/README.md) - the infra SA needs access to it specifically to
+# run `terraform plan`/`apply` from CI at all. Referencing the bucket by
+# name directly (not a data source) since a data source would itself need
+# storage.buckets.get, which is one of the exact permissions this binding
+# is trying to grant - a real chicken-and-egg discovered when the first CI
+# run of this workflow failed on exactly that. storage.admin (not just
+# objectAdmin) because the backend and this resource's own refresh both
+# need bucket-level operations (buckets.get, IAM policy get/set), not just
+# object read/write - scoped to only this one dedicated bucket, so still
+# least-privilege relative to a project-wide grant.
 resource "google_storage_bucket_iam_member" "infra_tfstate_access" {
-  bucket = data.google_storage_bucket.tfstate.name
-  role   = "roles/storage.objectAdmin"
+  bucket = "pixeltruth-0700-tfstate"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${google_service_account.infra.email}"
 }
