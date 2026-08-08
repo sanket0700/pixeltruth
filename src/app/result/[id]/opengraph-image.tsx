@@ -1,16 +1,10 @@
 import { ImageResponse } from "next/og";
 import { getResult } from "@/lib/data/results";
-import { getVerdict, VERDICT_LABEL } from "@/lib/verdict";
+import { getVerdict, VERDICT_COLOR, VERDICT_LABEL } from "@/lib/verdict";
 
 export const alt = "PixelTruth AI-generation likelihood result";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-
-const VERDICT_COLOR: Record<ReturnType<typeof getVerdict>, string> = {
-  "likely-ai": "#dc2626",
-  "possibly-ai": "#d97706",
-  "likely-real": "#16a34a",
-};
 
 export default async function OpengraphImage({ params }: PageProps<"/result/[id]">) {
   const { id } = await params;
