@@ -2,7 +2,37 @@ import "server-only";
 
 import type { AIDetectionResult, AIDetector, DetectionImage } from "./types";
 
-const HIVE_SYNC_TASK_URL = "https://api.thehive.ai/api/v2/task/sync";
+// Confirmed against a real call with a real key (see git history for the
+// v2 attempt this replaced): Hive's v2 task/sync endpoint now 403s for
+// non-Enterprise accounts. This is the current self-serve V3 model
+// endpoint, taken directly from the "API" tab of Hive's own Playground UI
+// for this model - not inferred from docs, which disagreed with
+// themselves on several details that turned out to not even be the right
+// API generation.
+const HIVE_DETECT_URL = "https://api.thehive.ai/api/v3/hive/ai-generated-and-deepfake-content-detection";
+
+// Classes in the response that describe the verdict itself or a
+// non-image-generator finding, rather than identifying a specific
+// generator - excluded when picking a "source model" guess. Confirmed
+// against a real response: a genuine photo still gets nonzero (near-zero)
+// scores across every one of the ~90 generator classes, which is noise,
+// not a detection - see MIN_SOURCE_MODEL_CONFIDENCE below.
+const VERDICT_CLASSES = new Set([
+  "ai_generated",
+  "not_ai_generated",
+  "none",
+  "inconclusive",
+  "inconclusive_video",
+  "deepfake",
+  "ai_generated_audio",
+  "not_ai_generated_audio",
+]);
+
+// Below this, the top generator class is indistinguishable from the noise
+// floor seen across a real non-AI test image (every one of ~90 generator
+// classes scored under 0.02, most under 1e-4) - reporting it as "detected"
+// would overclaim a signal that isn't there.
+const MIN_SOURCE_MODEL_CONFIDENCE = 0.5;
 
 export class HiveResponseParseError extends Error {
   constructor(
@@ -16,29 +46,18 @@ export class HiveResponseParseError extends Error {
 
 interface HiveClass {
   class: string;
-  score: number;
+  value: number;
 }
 
-interface HiveSyncResponse {
-  status?: Array<{
-    response?: {
-      output?: Array<{ classes?: HiveClass[] }>;
-    };
-  }>;
+interface HiveDetectResponse {
+  output?: Array<{ classes?: HiveClass[] }>;
 }
 
-// Hive's docs disagree with themselves on the exact multipart field name for
-// a local file upload ("media" in one worked curl example, "image" in the
-// OpenAPI schema on the reference page) - going with the schema's "image"
-// since it's the more authoritative source, but this needs a real API-key
-// smoke test (task 43) to confirm before this is trusted in production.
-const HIVE_IMAGE_FIELD = "image";
-
-function extractClasses(body: HiveSyncResponse): HiveClass[] {
-  const classes = body.status?.[0]?.response?.output?.[0]?.classes;
+function extractClasses(body: HiveDetectResponse): HiveClass[] {
+  const classes = body.output?.[0]?.classes;
   if (!classes) {
     throw new HiveResponseParseError(
-      "Hive sync response did not contain status[0].response.output[0].classes - the response shape may not match what was inferred from docs.",
+      "Hive response did not contain output[0].classes - the response shape may have changed.",
       body,
     );
   }
@@ -49,24 +68,22 @@ export class HiveDetector implements AIDetector {
   constructor(private readonly apiKey: string) {}
 
   async detect(image: DetectionImage): Promise<AIDetectionResult> {
-    const form = new FormData();
-    form.append(
-      HIVE_IMAGE_FIELD,
-      new Blob([new Uint8Array(image.buffer)], { type: image.mimeType }),
-      "upload",
-    );
-
-    const response = await fetch(HIVE_SYNC_TASK_URL, {
+    const response = await fetch(HIVE_DETECT_URL, {
       method: "POST",
-      headers: { Authorization: `Token ${this.apiKey}` },
-      body: form,
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        input: [{ media_base64: image.buffer.toString("base64") }],
+      }),
     });
 
     if (!response.ok) {
       throw new Error(`Hive API request failed: ${response.status} ${await response.text()}`);
     }
 
-    const body = (await response.json()) as HiveSyncResponse;
+    const body = (await response.json()) as HiveDetectResponse;
     const classes = extractClasses(body);
 
     const aiGenerated = classes.find((c) => c.class === "ai_generated");
@@ -77,14 +94,14 @@ export class HiveDetector implements AIDetector {
       );
     }
 
-    const sourceModel =
-      classes
-        .filter((c) => c.class !== "ai_generated" && c.class !== "not_ai_generated")
-        .sort((a, b) => b.score - a.score)[0]?.class ?? null;
+    const topGenerator = classes
+      .filter((c) => !VERDICT_CLASSES.has(c.class))
+      .sort((a, b) => b.value - a.value)[0];
 
     return {
-      aiLikelihoodScore: aiGenerated.score,
-      sourceModel: sourceModel === "none" || sourceModel === "inconclusive" ? null : sourceModel,
+      aiLikelihoodScore: aiGenerated.value,
+      sourceModel:
+        topGenerator && topGenerator.value >= MIN_SOURCE_MODEL_CONFIDENCE ? topGenerator.class : null,
       provider: "hive",
     };
   }
