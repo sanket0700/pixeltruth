@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// Only the Admin SDK ever touches Firestore in this project - there's no
+// client Firebase SDK at all, no accounts, nothing a browser talks to
+// directly. Deny-all is the correct rule set, not a placeholder to fill in
+// later: kept here as defense in depth (and because a Firestore database
+// requires *some* rules file) rather than because anything is expected to
+// need loosening.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
