@@ -52,10 +52,13 @@ resource "google_service_account_iam_member" "deployer_wif" {
   member             = local.github_repo_principal
 }
 
-resource "google_project_iam_member" "deployer_run_admin" {
+resource "google_project_iam_member" "deployer_run_developer" {
   project = var.project_id
-  role    = "roles/run.admin"
-  member  = "serviceAccount:${google_service_account.deployer.email}"
+  # Not run.admin - that includes setIamPolicy on Cloud Run services, which
+  # this account doesn't need (the public-access binding is managed once,
+  # declaratively, in cloud_run.tf - not re-granted on every deploy).
+  role   = "roles/run.developer"
+  member = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 resource "google_project_iam_member" "deployer_artifact_writer" {
@@ -105,6 +108,18 @@ resource "google_project_iam_member" "infra_roles" {
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.infra.email}"
+}
+
+# google_billing_budget (budget.tf) is scoped to the *billing account*, not
+# the project - none of the roles above (all project-level) cover it.
+# Billing accounts sit outside this project's resource hierarchy, so this
+# needs its own IAM member type.
+resource "google_billing_account_iam_member" "infra_budget_admin" {
+  billing_account_id = "0108BA-DB7A2C-6FA5F6"
+  role               = "roles/billing.costsManager"
+  member             = "serviceAccount:${google_service_account.infra.email}"
+
+  depends_on = [google_project_service.apis]
 }
 
 # Terraform state lives in a bucket created out-of-band during bootstrap

@@ -7,6 +7,9 @@ locals {
     "iamcredentials.googleapis.com",
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "billingbudgets.googleapis.com",
+    "cloudbilling.googleapis.com",
+    "monitoring.googleapis.com",
   ]
 }
 

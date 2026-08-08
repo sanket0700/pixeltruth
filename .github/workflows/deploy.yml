@@ -99,11 +99,19 @@ jobs:
           env_vars: |
             FIREBASE_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
             HIVE_API_KEY=${{ secrets.HIVE_API_KEY }}
-          # Cloud Run defaults to requiring IAM auth on every invocation.
-          # This is a public tool, so every deploy explicitly (and
-          # idempotently) keeps it open - not just a one-time setup step,
-          # in case the binding is ever removed some other way.
-          flags: --allow-unauthenticated
+          # Public access (roles/run.invoker for allUsers) is managed once,
+          # declaratively, in infra/cloud_run.tf - not via an
+          # --allow-unauthenticated flag here, since that requires
+          # run.services.setIamPolicy on every deploy, a permission
+          # deliberately excluded from this account's roles/run.developer
+          # role (deploy != grant access). See infra/wif.tf.
+          #
+          # min-instances=1 keeps one instance warm - scale-to-zero cold
+          # starts (measured, real requests) add real latency that hurts
+          # both UX and Core Web Vitals (LCP/TTFB), which matters directly
+          # for the SEO strategy even though the SEO push itself is
+          # deferred. Small, predictable monthly cost either way.
+          flags: --min-instances=1
 
       - name: Show deployed URL
         run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

@@ -24,9 +24,20 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # billingbudgets.googleapis.com specifically requires a quota project on
+  # every request (most GCP APIs don't enforce this for ADC callers, this
+  # one does) - without it, google_billing_budget fails with
+  # SERVICE_DISABLED against whatever ADC's default quota project happens
+  # to be, unrelated to this project. Discovered via a real failed apply.
+  user_project_override = true
+  billing_project       = var.project_id
 }
 
 provider "google-beta" {
   project = var.project_id
   region  = var.region
+
+  user_project_override = true
+  billing_project       = var.project_id
 }
