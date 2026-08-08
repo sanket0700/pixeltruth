@@ -1,5 +1,5 @@
 import { runDetection, type DetectionResult } from "@/lib/detection";
-import { checkAndConsumeRateLimit } from "@/lib/data/rateLimit";
+import { checkAndConsumeGlobalRateLimit, checkAndConsumeRateLimit } from "@/lib/data/rateLimit";
 import { createResult } from "@/lib/data/results";
 import { getClientIp } from "@/lib/getClientIp";
 import { ImageValidationError, validateImageFile } from "@/lib/validation/image";
@@ -27,13 +27,27 @@ export async function POST(request: Request) {
     throw err;
   }
 
-  // Rate limiting exists to bound Hive spend, so it only gates the
-  // paid call - free validation failures above don't cost a check.
+  // Rate limiting exists to bound Hive spend, so it only gates the paid
+  // call - free validation failures above don't cost a check. Per-IP
+  // first: a single spammy IP gets rejected without ever touching the
+  // global counter, which stays an accurate count of "requests that
+  // actually reached Hive," not "requests attempted."
   const ip = getClientIp(request);
   const rateLimit = await checkAndConsumeRateLimit(ip);
   if (!rateLimit.allowed) {
     return Response.json(
       { error: `Daily limit of ${rateLimit.limit} checks reached. Try again tomorrow.` },
+      { status: 429 },
+    );
+  }
+
+  // A distributed abuser rotating IPs isn't stopped by the per-IP limit
+  // alone - this is the backstop for that, not a normal-usage ceiling.
+  const globalRateLimit = await checkAndConsumeGlobalRateLimit();
+  if (!globalRateLimit.allowed) {
+    console.error("Global daily check limit reached", globalRateLimit);
+    return Response.json(
+      { error: "PixelTruth is experiencing unusually high demand. Please try again later." },
       { status: 429 },
     );
   }

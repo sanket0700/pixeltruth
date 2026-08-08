@@ -8,11 +8,19 @@ import { COLLECTIONS } from "./collections";
 // without a redeploy of the limit itself.
 const DEFAULT_DAILY_LIMIT = 10;
 
-function getDailyLimit(): number {
-  const raw = process.env.DAILY_CHECK_LIMIT;
-  if (!raw) return DEFAULT_DAILY_LIMIT;
+// A backstop, not a normal-usage ceiling: per-IP limiting alone doesn't
+// stop a distributed abuser rotating IPs from running up real Hive spend.
+// This is deliberately high relative to today's real traffic (a handful of
+// requests/day) - if it ever actually trips, that itself is the signal
+// something is wrong, on top of the budget alert (infra/budget.tf) and
+// uptime/monitoring already in place.
+const DEFAULT_GLOBAL_DAILY_LIMIT = 500;
+
+function getLimit(envVar: string, fallback: number): number {
+  const raw = process.env[envVar];
+  if (!raw) return fallback;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function todayKey(): string {
@@ -26,15 +34,15 @@ export interface RateLimitResult {
 }
 
 /**
- * Atomically checks and (if allowed) consumes one of the caller's daily
- * checks. A transaction, not a read-then-write, so two concurrent requests
- * from the same IP can't both slip through at the last slot.
+ * Atomically checks and (if allowed) consumes one slot against a counter
+ * doc. A transaction, not a read-then-write, so two concurrent requests
+ * can't both slip through at the last slot.
  */
-export async function checkAndConsumeRateLimit(ip: string): Promise<RateLimitResult> {
-  const limit = getDailyLimit();
+async function consumeCounter(
+  docRef: FirebaseFirestore.DocumentReference,
+  limit: number,
+): Promise<RateLimitResult> {
   const db = getAdminDb();
-  const docRef = db.collection(COLLECTIONS.RATE_LIMITS).doc(`${ip}_${todayKey()}`);
-
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
     const count = (snapshot.data()?.count as number | undefined) ?? 0;
@@ -47,4 +55,17 @@ export async function checkAndConsumeRateLimit(ip: string): Promise<RateLimitRes
     transaction.set(docRef, { count: newCount, updatedAt: new Date().toISOString() });
     return { allowed: true, remaining: limit - newCount, limit };
   });
+}
+
+export async function checkAndConsumeRateLimit(ip: string): Promise<RateLimitResult> {
+  const limit = getLimit("DAILY_CHECK_LIMIT", DEFAULT_DAILY_LIMIT);
+  const docRef = getAdminDb().collection(COLLECTIONS.RATE_LIMITS).doc(`${ip}_${todayKey()}`);
+  return consumeCounter(docRef, limit);
+}
+
+/** Global, IP-agnostic circuit breaker - see DEFAULT_GLOBAL_DAILY_LIMIT. */
+export async function checkAndConsumeGlobalRateLimit(): Promise<RateLimitResult> {
+  const limit = getLimit("GLOBAL_DAILY_CHECK_LIMIT", DEFAULT_GLOBAL_DAILY_LIMIT);
+  const docRef = getAdminDb().collection(COLLECTIONS.GLOBAL_RATE_LIMIT).doc(todayKey());
+  return consumeCounter(docRef, limit);
 }
