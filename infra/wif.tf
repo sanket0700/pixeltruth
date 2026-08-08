@@ -99,6 +99,7 @@ locals {
     "roles/iam.workloadIdentityPoolAdmin",   # the pool/provider above
     "roles/resourcemanager.projectIamAdmin", # google_project_iam_member (this file)
     "roles/run.admin",                       # inspecting/managing the Cloud Run service if infra ever needs to
+    "roles/monitoring.editor",               # monitoring.tf: uptime check, alert policy, notification channel
   ]
 }
 
