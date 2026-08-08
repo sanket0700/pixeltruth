@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { UploadForm } from "./UploadForm";
 
 export default function Home() {
@@ -14,6 +15,14 @@ export default function Home() {
         </div>
         <UploadForm />
       </main>
+      <footer className="mt-16 flex gap-4 text-xs text-zinc-400 dark:text-zinc-600">
+        <Link href="/terms" className="hover:text-zinc-600 dark:hover:text-zinc-400">
+          Terms
+        </Link>
+        <Link href="/privacy" className="hover:text-zinc-600 dark:hover:text-zinc-400">
+          Privacy
+        </Link>
+      </footer>
     </div>
   );
 }
