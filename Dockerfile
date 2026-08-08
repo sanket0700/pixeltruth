@@ -31,6 +31,19 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=pixeltruth:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=pixeltruth:nodejs /app/.next/static ./.next/static
+# Fetched by the CI workflow before `docker build` (see
+# .github/workflows/deploy.yml and infra/models.tf) - not something this
+# Dockerfile downloads itself, so it stays GCP-agnostic.
+COPY --from=builder --chown=pixeltruth:nodejs /app/models ./models
+# onnxruntime-node's native binding dlopen()s a sibling libonnxruntime.so
+# at runtime rather than require()-ing it - invisible to Next's standalone
+# require-graph tracing even with it marked serverExternalPackages, which
+# copies the .node file but silently missed this one (confirmed by
+# actually running the built image and hitting a real "cannot open shared
+# object file" error, not assumed). Copying the whole real package
+# directly sidesteps needing to guess what the tracer will and won't
+# catch for native addons that load their own dependencies this way.
+COPY --from=builder --chown=pixeltruth:nodejs /app/node_modules/onnxruntime-node ./node_modules/onnxruntime-node
 
 USER pixeltruth
 EXPOSE 8080

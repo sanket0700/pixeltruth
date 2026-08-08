@@ -50,6 +50,32 @@ jobs:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ hashFiles('package-lock.json') }}
 
+      # npm test exercises CommunityForensicsDetector against real
+      # fixtures, which needs the real ONNX model present - the model
+      # bucket is private (see infra/models.tf), so this job needs its own
+      # GCP auth even though it never touches Cloud Run/Artifact Registry.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Cached by content hash - the model doesn't change on every commit,
+      # no reason to re-download 87MB on every single push/PR.
+      - uses: actions/cache@v4
+        id: model-cache
+        with:
+          path: models/commfor-384.onnx
+          key: commfor-384-v1
+
+      - if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models
+          gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v1.onnx models/commfor-384.onnx
+
       - run: npm test
 
       - run: npm run build
@@ -74,6 +100,13 @@ jobs:
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # Baked into the image at build time (Dockerfile COPYs models/), not
+      # fetched by the container at runtime - see infra/models.tf.
+      - name: Fetch AI-detection model
+        run: |
+          mkdir -p models
+          gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v1.onnx models/commfor-384.onnx
 
       - name: Build and push image
         env:
@@ -122,7 +155,18 @@ jobs:
           # gap for an app that parses untrusted uploaded images through a
           # native addon. pixeltruth-runtime (infra/runtime.tf) has only
           # roles/datastore.user, the actual ceiling of what the app needs.
-          flags: --service-account=pixeltruth-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          #
+          # --memory/--cpu: measured, not guessed - the Node process alone
+          # (model loaded, one inference done) uses ~400MB RSS, dangerously
+          # close to Cloud Run's unset 512Mi default with zero headroom for
+          # Next.js itself or concurrent requests. Unlike min-instances,
+          # this cost is request-duration-only (not idle/always-on), so
+          # sizing generously here doesn't carry the same cost tradeoff
+          # that min-instances did.
+          flags: >-
+            --service-account=pixeltruth-runtime@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+            --memory=2Gi
+            --cpu=2
 
       - name: Show deployed URL
         run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

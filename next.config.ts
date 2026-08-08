@@ -22,9 +22,9 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  // Native Node addon (a .node binary) - must stay external rather than
+  // Native Node addons (.node binaries) - must stay external rather than
   // bundled, same reason sharp/firebase-admin get this treatment.
-  serverExternalPackages: ["@contentauth/c2pa-node"],
+  serverExternalPackages: ["@contentauth/c2pa-node", "onnxruntime-node"],
   // Slim runtime image for Docker - only traced files get copied in.
   output: "standalone",
 

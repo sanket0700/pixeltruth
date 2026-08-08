@@ -98,6 +98,7 @@ locals {
     "roles/resourcemanager.projectIamAdmin", # google_project_iam_member (this file)
     "roles/run.admin",                       # inspecting/managing the Cloud Run service if infra ever needs to
     "roles/monitoring.editor",               # monitoring.tf: uptime check, alert policy, notification channel
+    "roles/storage.admin",                   # models.tf: google_storage_bucket (project-level bucket *creation* isn't covered by the tfstate bucket's bucket-scoped grant)
   ]
 }
 
