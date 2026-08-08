@@ -62,7 +62,7 @@ jobs:
       # through Actions logs for something this consequential (real,
       # billed cloud resources).
       - if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PLAN: "${{ steps.plan.outputs.stdout }}"
         with:
