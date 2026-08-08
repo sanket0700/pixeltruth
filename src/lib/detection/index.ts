@@ -4,7 +4,13 @@ import { checkC2pa } from "./c2pa";
 import { HiveDetector } from "./hive";
 import type { AIDetector, DetectionImage, DetectionResult } from "./types";
 
-export type { AIDetectionResult, AIDetector, C2paCheckResult, DetectionResult } from "./types";
+export type {
+  AIDetectionResult,
+  AIDetector,
+  C2paCheckResult,
+  DetectionImage,
+  DetectionResult,
+} from "./types";
 
 let cachedDetector: AIDetector | undefined;
 
