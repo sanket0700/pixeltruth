@@ -10,6 +10,17 @@ updates:
       # from the "patch/minor" grouping below.
       minor-and-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Major bumps confirmed broken by real CI failures (PR #9, #10), not
+      # something fixable in this repo - typescript-eslint doesn't support
+      # TS 7.0 yet (typescript-eslint#10940), and eslint-config-next's
+      # bundled eslint-plugin-react crashes under ESLint 10's changed rule
+      # context API. Without this, Dependabot re-proposes the same broken
+      # bump every week. Remove once upstream catches up.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
