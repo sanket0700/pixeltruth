@@ -46,3 +46,12 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+
+# terraform - state lives remotely (infra/versions.tf backend), never
+# commit local state/cache/plan output. .terraform.lock.hcl IS committed
+# (pins exact provider versions) - not excluded here.
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfplan
+infra/.terraform.tfstate.lock.info
