@@ -10,6 +10,7 @@
     "emulators": "firebase emulators:start --import=./.firebase-emulator-data --export-on-exit"
   },
   "dependencies": {
+    "@contentauth/c2pa-node": "^0.8.3",
     "firebase-admin": "^14.2.0",
     "next": "16.3.0",
     "react": "19.2.8",
@@ -29,6 +30,12 @@
   },
   "overrides": {
     "uuid": "^11.1.1",
-    "@opentelemetry/core": "^2.10.0"
+    "@opentelemetry/core": "^2.10.0",
+    "sharp": "^0.35.3"
+  },
+  "allowScripts": {
+    "c2pa-node@0.5.26": true,
+    "sharp@0.35.3": true,
+    "@contentauth/c2pa-node@0.8.3": true
   }
 }
