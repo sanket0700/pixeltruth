@@ -106,12 +106,15 @@ jobs:
           # deliberately excluded from this account's roles/run.developer
           # role (deploy != grant access). See infra/wif.tf.
           #
-          # min-instances=1 keeps one instance warm - scale-to-zero cold
-          # starts (measured, real requests) add real latency that hurts
-          # both UX and Core Web Vitals (LCP/TTFB), which matters directly
-          # for the SEO strategy even though the SEO push itself is
-          # deferred. Small, predictable monthly cost either way.
-          flags: --min-instances=1
+          # No --min-instances: tried min-instances=1 to avoid scale-to-zero
+          # cold starts, but at ~$60/month (1 vCPU + 512MiB kept allocated
+          # 24/7, computed against real Cloud Run pricing - not the "a few
+          # dollars" this comment used to claim) it doesn't pay for itself
+          # yet. The two things that made it worth it - Core Web Vitals for
+          # SEO ranking, and real visitors noticing the latency - both
+          # require the SEO push and real traffic that don't exist yet
+          # (SEO is explicitly paused pending the Hive ToS situation).
+          # Revisit when the SEO push actually resumes.
 
       - name: Show deployed URL
         run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
