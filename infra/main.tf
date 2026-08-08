@@ -27,9 +27,9 @@ resource "google_firestore_database" "default" {
   location_id = var.region
   type        = "FIRESTORE_NATIVE"
 
-  concurrency_mode             = "OPTIMISTIC"
-  app_engine_integration_mode  = "DISABLED"
-  delete_protection_state      = "DELETE_PROTECTION_DISABLED"
+  concurrency_mode            = "OPTIMISTIC"
+  app_engine_integration_mode = "DISABLED"
+  delete_protection_state     = "DELETE_PROTECTION_DISABLED"
 
   depends_on = [google_project_service.apis]
 }

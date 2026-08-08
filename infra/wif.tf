@@ -48,8 +48,8 @@ resource "google_service_account" "deployer" {
 
 resource "google_service_account_iam_member" "deployer_wif" {
   service_account_id = google_service_account.deployer.name
-  role                = "roles/iam.workloadIdentityUser"
-  member              = local.github_repo_principal
+  role               = "roles/iam.workloadIdentityUser"
+  member             = local.github_repo_principal
 }
 
 resource "google_project_iam_member" "deployer_run_admin" {
@@ -80,8 +80,8 @@ resource "google_service_account" "infra" {
 
 resource "google_service_account_iam_member" "infra_wif" {
   service_account_id = google_service_account.infra.name
-  role                = "roles/iam.workloadIdentityUser"
-  member              = local.github_repo_principal
+  role               = "roles/iam.workloadIdentityUser"
+  member             = local.github_repo_principal
 }
 
 # Least-privilege for exactly what this directory's resources need to
