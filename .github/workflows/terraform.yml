@@ -20,7 +20,7 @@ permissions:
   # identity can exist before the trust relationship it depends on does.
   # See infra/README.md.
   id-token: write
-  pull-request: write
+  pull-requests: write
 
 jobs:
   plan:
