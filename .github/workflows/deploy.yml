@@ -1,0 +1,109 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGION: us-central1
+  SERVICE: pixeltruth
+  REPOSITORY: pixeltruth
+
+permissions:
+  contents: read
+  # Required for keyless auth to GCP via Workload Identity Federation - no
+  # service-account JSON key is stored in this repo.
+  id-token: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # Java is needed by the Firestore emulator npm test spins up via
+      # `firebase emulators:exec`. ubuntu-latest usually ships one already,
+      # but pin it explicitly rather than depend on runner-image defaults
+      # that can change.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # Emulator binaries would otherwise re-download on every run -
+      # cache keyed on the firebase-tools version pinned in
+      # package-lock.json, since that's what determines which emulator
+      # binaries get requested.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('package-lock.json') }}
+
+      - run: npm test
+
+      - run: npm run build
+
+  deploy:
+    needs: ci
+    # Only after a real merge to main - never for a pull_request event, so
+    # opening/updating a PR gets CI feedback without ever touching prod.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}
+        run: |
+          docker build \
+            -t "$IMAGE:${{ github.sha }}" \
+            -t "$IMAGE:latest" \
+            .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:${{ github.sha }}
+          # FIREBASE_PROJECT_ID and HIVE_API_KEY are read at runtime
+          # (server-only env vars, no NEXT_PUBLIC_ prefix) - never baked
+          # into the image as build args, unlike Kaleido's public Firebase
+          # web config. HIVE_API_KEY is a real secret and must stay one.
+          env_vars: |
+            FIREBASE_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            HIVE_API_KEY=${{ secrets.HIVE_API_KEY }}
+          # Cloud Run defaults to requiring IAM auth on every invocation.
+          # This is a public tool, so every deploy explicitly (and
+          # idempotently) keeps it open - not just a one-time setup step,
+          # in case the binding is ever removed some other way.
+          flags: --allow-unauthenticated
+
+      - name: Show deployed URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
