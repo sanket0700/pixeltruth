@@ -81,12 +81,12 @@ jobs:
         id: model-cache
         with:
           path: models/commfor-384.onnx
-          key: commfor-384-v1
+          key: commfor-384-v2
 
       - if: github.actor != 'dependabot[bot]' && steps.model-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p models
-          gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v1.onnx models/commfor-384.onnx
+          gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v2.onnx models/commfor-384.onnx
 
       - run: npm test
 
@@ -118,7 +118,7 @@ jobs:
       - name: Fetch AI-detection model
         run: |
           mkdir -p models
-          gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v1.onnx models/commfor-384.onnx
+          gcloud storage cp gs://${{ secrets.GCP_PROJECT_ID }}-models/commfor-384/v2.onnx models/commfor-384.onnx
 
       - name: Build and push image
         env:

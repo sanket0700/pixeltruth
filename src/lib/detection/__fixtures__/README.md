@@ -22,12 +22,13 @@ assumed:
   Midjourney.jpg") - CC0/public domain. Scores ~0.99 - the reliable
   "should score high" fixture.
 - `dalle2-known-ai.jpg` ("DALL-E 2 artificial intelligence digital image
-  generated photo.jpg") - public domain. Scores ~0.32 - **a real, known
-  miss** (should classify as AI-generated and doesn't, at this
-  resolution/compression). Kept deliberately, not swapped out for an
-  easier example: it's real evidence for the product's own stated caveat
-  that accuracy drops for recompressed/re-shared images, and a regression
-  fixture if the model or preprocessing ever changes.
+  generated photo.jpg") - public domain. Was a real, known miss
+  (~0.32, should classify as AI-generated and didn't) with the original
+  Community Forensics checkpoint - real evidence the product's stated
+  caveat about recompressed/re-shared images was true. Fixed by the
+  generator-coverage fine-tune (see detector-benchmark-notes.md) - now
+  scores ~0.94. Kept as a regression fixture: if this score drops back
+  toward the old miss range, that's a real signal something broke.
 
 Both are the *original* resolution as downloaded - resizing them down
 (tried during development) measurably changed the scores, in one case

@@ -26,13 +26,17 @@ async function loadFixture(name: string) {
 describe.skipIf(!modelAvailable)("CommunityForensicsDetector", () => {
   const detector = new CommunityForensicsDetector();
 
-  // Real numbers, verified against the reference PyTorch implementation
-  // and the paper's own published example output before being trusted -
-  // see the commit history for src/lib/detection/communityForensics.ts.
-  it("scores a real photo with a valid C2PA manifest as low", async () => {
+  // Real numbers, re-measured against the fine-tuned checkpoint (see
+  // detector-benchmark-notes.md in the repo root for the full before/after
+  // benchmark). Fine-tuning traded some real-photo confidence for a large
+  // AI-recall gain - these real-photo fixtures now score higher than
+  // before but still land below the product's 0.8 "likely-ai" verdict
+  // boundary (src/lib/verdict.ts), which is what actually matters.
+  it("scores a real photo with a valid C2PA manifest below the likely-ai boundary", async () => {
     const buffer = await loadFixture("C.jpg");
     const result = await detector.detect({ buffer, mimeType: "image/jpeg" });
-    expect(result.aiLikelihoodScore).toBeLessThan(0.1);
+    expect(result.aiLikelihoodScore).toBeGreaterThan(0.55);
+    expect(result.aiLikelihoodScore).toBeLessThan(0.8);
     expect(result.provider).toBe("community-forensics");
     expect(result.sourceModel).toBeNull();
   });
@@ -40,13 +44,14 @@ describe.skipIf(!modelAvailable)("CommunityForensicsDetector", () => {
   it("scores a real photo with a broken C2PA signature as low", async () => {
     const buffer = await loadFixture("E-sig-CA.jpg");
     const result = await detector.detect({ buffer, mimeType: "image/jpeg" });
-    expect(result.aiLikelihoodScore).toBeLessThan(0.01);
+    expect(result.aiLikelihoodScore).toBeLessThan(0.3);
   });
 
-  it("scores a real photo with no manifest as low", async () => {
+  it("scores a real photo with no manifest below the likely-ai boundary", async () => {
     const buffer = await loadFixture("no_manifest.jpg");
     const result = await detector.detect({ buffer, mimeType: "image/jpeg" });
-    expect(result.aiLikelihoodScore).toBeLessThan(0.01);
+    expect(result.aiLikelihoodScore).toBeGreaterThan(0.4);
+    expect(result.aiLikelihoodScore).toBeLessThan(0.8);
   });
 
   it("scores a known Midjourney image as high", async () => {
@@ -55,17 +60,13 @@ describe.skipIf(!modelAvailable)("CommunityForensicsDetector", () => {
     expect(result.aiLikelihoodScore).toBeGreaterThan(0.9);
   });
 
-  // Deliberately NOT asserting "should be high" here - this is a real,
-  // known miss (see __fixtures__/README.md), and asserting the correct
-  // answer would just make this test permanently, uninformatively red.
-  // Asserting the actual current behavior narrowly means any future
-  // change (preprocessing tweak, model swap, resize-kernel change) that
-  // shifts this score gets caught and looked at deliberately, rather than
-  // silently drifting either better or worse unnoticed.
-  it("characterizes the known miss on a recompressed DALL-E 2 image", async () => {
+  // This used to be a documented, deliberate known miss (score 0.25-0.4,
+  // see git history) - fine-tuning fixed it for real, not just moved the
+  // number around. Asserting the fix narrowly (not just ">some threshold")
+  // so any future regression back toward a miss gets caught deliberately.
+  it("correctly catches the previously-missed recompressed DALL-E 2 image", async () => {
     const buffer = await loadFixture("dalle2-known-ai.jpg");
     const result = await detector.detect({ buffer, mimeType: "image/jpeg" });
-    expect(result.aiLikelihoodScore).toBeGreaterThan(0.25);
-    expect(result.aiLikelihoodScore).toBeLessThan(0.4);
+    expect(result.aiLikelihoodScore).toBeGreaterThan(0.85);
   });
 });
