@@ -29,7 +29,7 @@ from PIL import Image
 
 OUTPUT_ROOT = Path.home() / "train-data-v3"
 TARGET_PER_CLASS = 800
-MAX_ADDITIONAL_SHARDS = 500  # higher than collect_data.py's 200 - nano-banana/seedream are rare (~10/shard in a 3-shard sample), need more shards scanned to approach 800
+MAX_ADDITIONAL_SHARDS = 100  # measured ~239s/shard on this VM (shards run several GB, network-bound) - 500 would be ~33h, mostly wasted chasing wan-2.1/openflux which capped at 85/800 and 136/800 in the v2 collection regardless of budget size. 100 gives nano-banana/seedream a real shot (~10/shard and ~7.7/shard observed) while keeping total runtime to ~6-7h.
 MIN_FREE_DISK_GB = 20
 MIN_FREE_RAM_MB = 2000
 
