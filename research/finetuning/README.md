@@ -63,13 +63,29 @@ copied here because the checkpoint's own repo doesn't vendor it.
 
 The first fine-tuning attempt ran data collection on the local Mac and
 drove system swap to 89% full - a real interruption, not just slow. All
-of this now runs on a scratch GCP Compute Engine VM instead
-(`pixeltruth-finetune-scratch`, n1-standard-4, us-central1-a, project
-`pixeltruth-0700` - created/deleted per experiment, not a persistent
-resource). GPU quota (`GPUS_ALL_REGIONS`) is 0 on this project and
-wasn't worth requesting for a model this small - CPU fine-tuning of a
-~22M-param ViT-Small on a few thousand images is tractable in about an
-hour.
+of this now runs on cloud compute instead - see "Compute: GPU vs CPU"
+below for the current recommendation.
+
+## Compute: GPU vs CPU
+
+FT1/FT2 both trained on a CPU-only GCP VM (n1-standard-4,
+`pixeltruth-finetune-scratch`, us-central1-a, project `pixeltruth-0700`)
+- about 4.2 hours per run for a partial-freeze fine-tune. GCP's own GPU
+quota (`GPUS_ALL_REGIONS`) is 0 on this project and first-time approval
+can take up to a week, so that VM was CPU-only by necessity, not choice.
+
+As of the full-unfreeze experiment (`full-unfreeze-legal-results.md`),
+GPU compute is cheap and fast enough via **RunPod** (not GCP) to be the
+default choice instead: a real measured comparison found an RTX A4000
+pod ($0.25/hr, RunPod secure cloud) ran full end-to-end fine-tuning
+**71x faster** than the CPU VM (0.012s/image vs 0.852s/image), and the
+full 8-epoch training run in that experiment took 19 minutes end-to-end
+for about $0.08. `runpodctl` (RunPod's CLI) is fully scriptable the same
+way `gcloud` is - see `time_full_unfreeze.py` and `train_legal_full.py`
+for the GPU-aware script pattern (device auto-detection, moving
+tensors/model to `cuda`, `torch.cuda.synchronize()` around timed
+sections). Prefer RunPod GPU over the CPU VM for any future training run
+here unless there's a specific reason not to.
 
 ## Data licensing
 
