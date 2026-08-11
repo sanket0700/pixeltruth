@@ -26,10 +26,19 @@ on a scratch GCP VM (`pixeltruth-gptimg-re`, e2-standard-4, us-east1-b,
 torn down after use), script committed alongside this doc as
 `gpt_image_1_forensic_probes.py`.
 
-Five hypotheses were tested. Four completed with real quantitative
-results; the fifth (AEROBLADE-style VAE reconstruction) was attempted but
-did not finish in reasonable time on CPU and is reported as incomplete,
-not negative - see that section.
+Five hypotheses were tested, all now complete with real quantitative
+results, plus a follow-up cross-dataset validation pass (see below) that
+tested the two positive findings (H2, H3) against the held-out
+aidetectarena benchmark using a proper train/test split (classifier fit
+on `train-data-v3`, evaluated on the disjoint benchmark) - this is what
+actually determines whether any of this is a usable finding, not the
+same-dataset numbers alone.
+
+The follow-up validation and AEROBLADE completion ran on a scratch GCP
+CPU VM (`pixeltruth-validate-signal`, e2-standard-4, us-east1-b) and a
+RunPod RTX 2000 Ada GPU pod (`pixeltruth-aeroblade`), both torn down
+after use; scripts committed alongside this doc as
+`validate_forensic_signal.py` and `aeroblade_test.py`.
 
 ## H1: Radial-averaged 2D power spectrum - no discriminative signal found
 
@@ -142,75 +151,154 @@ by testing, not assumed - but a dead end for this dataset. Any
 provenance-metadata detection angle would need to test directly against
 freshly-generated, unprocessed API output, not this benchmark dataset.
 
-## H5: AEROBLADE-style VAE reconstruction - incomplete, not negative
+## H5: AEROBLADE-style VAE reconstruction - completed, but undermined by a control failure
 
-Attempted: encode-decode GPT Image 1.5 samples through a real public
-Stable Diffusion VAE (`stabilityai/sd-vae-ft-mse`) and compare
-reconstruction error against real photos and known-diffusion samples -
-the same technique `from-scratch-detector-research.md` identified as a
-proven, training-free mechanism-detection method (CVPR 2024, mAP 0.992
-on its own benchmark).
+Completed on a RunPod RTX 2000 Ada GPU (`aeroblade_test.py`): encode-decode
+GPT Image 1.5 samples, real photos, and three known-diffusion references
+(SD 1.5, Flux Schnell, SD 3.5) through a real public Stable Diffusion VAE
+(`stabilityai/sd-vae-ft-mse`), comparing mean-squared reconstruction
+error. AEROBLADE's premise: an LDM's own VAE reconstructs its own
+outputs with characteristically *lower* error than images with no shared
+latent space (CVPR 2024, mAP 0.992 on its own benchmark).
 
-**Did not complete.** CPU-bound VAE encode/decode at 512x512 on the
-e2-standard-4 scratch VM did not finish even a single class's worth of
-results (n=60) after 45+ minutes of active, genuine computation (verified
-via `ps` - not hung, just far slower than expected for this operation).
-This is a resource/time-budget limitation, not a finding - the right fix
-is running this on GPU (the RunPod pattern already established
-elsewhere this session makes this a ~10-20 minute job instead), not a
-reason to conclude anything about GPT Image 1.5 from it. Left as the
-clearest concrete next step if this line of investigation continues.
+**Real numbers** (n=80/class, mean MSE, ranked lowest/most-diffusion-like
+to highest):
+
+| Class | mean recon. error |
+|---|---:|
+| **GPT Image 1.5** | **0.00254** |
+| Flux Schnell (known diffusion) | 0.00396 |
+| SD 3.5 (known diffusion) | 0.00594 |
+| real | 0.00880 |
+| **SD 1.5 (known diffusion)** | **0.01602** |
+
+At face value, GPT Image 1.5 shows the *lowest* reconstruction error of
+every class - the pattern AEROBLADE predicts for a shared/similar latent
+space, i.e. evidence *against* the discrete-autoregressive hypothesis and
+*for* some diffusion-like mechanism.
+
+**But this result cannot be trusted as stated, because the test failed
+its own sanity check.** SD 1.5 is a *known* diffusion model that should
+show low reconstruction error against a Stable-Diffusion-family VAE by
+AEROBLADE's basic premise - instead it shows the *highest* error of every
+class tested, including real photos. A test that misclassifies its own
+positive control this badly cannot be trusted to correctly rank an
+unknown class like GPT Image 1.5. The most likely explanation: OpenFake's
+collection/re-encoding pipeline (the same pipeline H4 confirmed strips
+EXIF/C2PA metadata) probably re-compresses and/or resizes images after
+generation, and AEROBLADE's mechanism depends on fine, low-level
+numerical fidelity between a generator's raw output and its own VAE - a
+JPEG re-encode or resize in between is enough to break that
+correspondence for *any* class, known or unknown. This wasn't tested
+directly (would need fresh, unprocessed API output to confirm), but it's
+the most likely cause and is reported as an open methodological gap, not
+papered over.
+
+**Conclusion for H5: inconclusive, not negative and not positive.** The
+GPT Image 1.5 number cannot be interpreted in either direction while the
+known-diffusion control fails this badly. This result is reported in
+full rather than discarded, but should not be cited as evidence for or
+against the discrete-generation hypothesis.
+
+## Cross-dataset validation: the blockiness/kurtosis signal does not generalize
+
+The original ask was clear: don't trust the n=200, same-dataset H2/H3
+findings as more than a lead until tested with a real held-out
+evaluation. That test is now done (`validate_forensic_signal.py`), with
+proper separation to avoid optimistic bias: a logistic regression on
+[blockiness_64, kurtosis] was fit **only** on `train-data-v3`'s
+gpt-image-1 (800) and real (660) samples, then evaluated **purely** on
+the full, completely disjoint aidetectarena benchmark (2038 images) -
+the same cross-dataset methodology this project has used for every
+fine-tuning result, not benchmark-internal train/test splitting.
+
+**Result: the signal fails to generalize.**
+
+| | held-out aidetectarena benchmark |
+|---|---:|
+| GPT Image 1.5 recall (caught rate) | **8.33%** (5/60) |
+| Real-photo false-positive rate | **23.43%** |
+| Precision | 2.05% |
+| Accuracy | 72.78% |
+
+8.33% recall is barely better than noise for a binary signal, and a
+23.43% real-photo false-positive rate would be unusable in production
+regardless. The cross-generator firing-rate table makes the failure mode
+concrete - the classifier fires *more* on Flux Schnell (31.7%) than on
+actual GPT Image 1.5 samples (8.3%), and fires on real photos (23.4%)
+almost as often as on GPT Image 1.5 itself:
+
+| Generator | fires "GPT-like" |
+|---|---:|
+| Flux Schnell | 31.7% |
+| Grok Aurora | 25.0% |
+| real | 23.4% |
+| Hunyuan v3 | 22.0% |
+| Flux Pro v1.1 | 22.0% |
+| ... | ... |
+| **GPT Image 1.5** | **8.3%** |
+| Qwen 2512 | 6.7% |
+| SD 3.5 | 6.7% |
+| Recraft v3 | 3.3% |
+| Gemini 3 Pro | 3.3% |
+
+**Honest interpretation**: the n=200 same-dataset separation reported in
+H2/H3 above was real, but almost certainly reflects something specific
+to `train-data-v3`'s slice of OpenFake's GPT Image 1.5 samples (a
+particular resolution, compression setting, or resizing artifact from
+collection) rather than a genuine, portable GPT-Image-1.5 signature -
+the classic failure mode of a forensic feature that looks strong within
+one dataset and evaporates cross-dataset. This is exactly the kind of
+overfitting the project's cross-dataset validation methodology exists to
+catch, and it caught it here. The H2/H3 raw measurements themselves
+aren't wrong, but the earlier "promising lead, usable as an auxiliary
+feature" framing was premature and is retracted by this result.
 
 ## Overall conclusion
 
-**What the evidence supports**: GPT Image 1.5's local pixel structure is
-measurably and substantially different from every tested diffusion model
-(both U-Net and DiT-based) and from real photos, in a way that's
-specifically consistent with some form of discrete, grid/patch-structured
-generation process - the blockiness and noise-residual-kurtosis findings
-are independent measurements that converge on the same conclusion. This
-is at least directionally consistent with a VQ-tokenizer-based
-autoregressive lineage (matching OpenAI's own DALL-E 1/2 history with
-discrete image tokenization, which GPT Image plausibly descends from),
-though an unusually coarse patch-transformer diffusion variant can't be
-fully ruled out by this evidence alone - both operate on a spatial grid,
-and this analysis can't cleanly distinguish "token boundary" from
-"unusually rigid patch boundary."
+**What the evidence supports**: on the original n=200 same-dataset
+sample, GPT Image 1.5's local pixel structure was measurably different
+from every tested diffusion model and from real photos (H2/H3). That
+difference does **not** hold up as a real, portable GPT-Image-1.5
+signature under proper cross-dataset validation - it most likely reflects
+a collection-pipeline artifact specific to this project's OpenFake
+sample, not the generator itself.
 
 **What the evidence rules against**: GPT Image 1.5 sharing a mechanism
-with Gemini/nano-banana. The two black-box generators show clearly
-different signatures on both H2 and H3 - Gemini looks close to real
-photos and U-Net diffusion on these specific metrics, GPT Image 1.5
-looks like an outlier from everything tested. Worth remembering for
-future fine-tuning/detection work: these two generators may need
-genuinely different treatment, not a shared "black-box generator"
-strategy.
+with Gemini/nano-banana, on H2/H3's raw same-dataset measurements -
+Gemini looked close to real photos and U-Net diffusion on these specific
+metrics, GPT Image 1.5 looked like an outlier from everything tested.
+This finding is weaker after the cross-dataset failure above (if the
+GPT Image 1.5 signal itself was a dataset artifact, the Gemini contrast
+may partly be one too) but is still worth keeping in mind rather than
+assuming both black-box generators need the same treatment.
 
-**What's genuinely inconclusive**: the exact mechanism (H1 gave no
-signal either way; H5 never completed). "Consistent with discrete
-grid-structured generation, most other explanations ruled out" is the
-honest ceiling of what this analysis can claim - not "proven to be
-autoregressive/VQ-based."
+**What's genuinely inconclusive**: the exact generation mechanism. H1
+gave no signal either way. H5 (AEROBLADE) completed but its own
+known-diffusion control (SD 1.5) failed the basic sanity check the test
+depends on, so its GPT Image 1.5 number can't be trusted in either
+direction. H2/H3's forensic difference is real within-dataset but didn't
+survive cross-dataset validation. After a genuinely rigorous attempt,
+**this analysis does not have a validated, generalizable finding about
+GPT Image 1.5's generation mechanism** - the honest ceiling here is "one
+plausible-sounding hypothesis (discrete/grid-structured generation)
+that real testing failed to confirm," not a positive result.
 
 ## Is this usable as a detection signal?
 
-Tentatively, yes - as a narrow, auxiliary feature, not a standalone
-detector. The stride-64 blockiness metric (1.310 for GPT Image 1.5 vs.
-1.055 for real photos) and the noise-residual-kurtosis metric (145.0 vs.
-66.5) both show real, substantial separation on n=200 real-photo-vs-GPT-
-Image-1.5 samples - large enough to be a plausible cheap classical-forensics
-feature, computable in milliseconds per image with no neural network,
-that could be added as one signal in an ensemble alongside the existing
-fine-tuned ViT detector.
+**No**, not as tested. The cross-dataset validation above is the
+definitive answer to the question the original report left open: 8.33%
+recall and 23.43% real-photo false-positive rate rule this out as a
+production auxiliary feature in its current form. Two honest options if
+this line of investigation continues, neither of which this doc claims
+credit for having done:
 
-**What this is not**: a validated production signal. n=200 is a
-research-scale sample with no held-out test set, no cross-validation
-against the full aidetectarena benchmark, and critically no measurement
-of false-positive rate against the *other* generators or real-photo
-subcategories (does a busy, high-detail real photo also trigger high
-blockiness? Untested here). Before this is more than a promising lead:
-run it as an actual classifier (e.g. logistic regression on
-[blockiness_64, kurtosis] as two features) against the full
-aidetectarena benchmark's held-out generators, not just this training
-sample, and report real precision/recall - the same rigor already
-applied to every fine-tuning result in this branch.
+1. Re-derive the features on *fresh* GPT Image 1.5 API output (not
+   OpenFake-collected/re-processed samples) to test whether the
+   collection-pipeline-artifact explanation is really what happened, or
+   whether the signal was never real to begin with.
+2. Treat this as a closed, negative result and redirect effort toward
+   the levers already proven to work this session - direct fine-tuning
+   exposure to restricted generators (the `combined-v3` checkpoint) - for
+   the generators that matter most, rather than continuing to chase a
+   classical-forensics signal that hasn't survived its first real test.
