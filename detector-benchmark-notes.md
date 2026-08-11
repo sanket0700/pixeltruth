@@ -313,3 +313,46 @@ real-photo risk vs. AI-recall the product wants to trade.
 **Outstanding before this ships to production:** the licensing question
 noted above (GPT Image 1.5/Gemini training-data provenance) - explicitly
 deferred, not resolved, per direction to validate the approach first.
+
+## v3 deployment - combined legal+restricted-generator fine-tune (deployed)
+
+Third fine-tuning experiment (`v2` above being the first) - full
+end-to-end fine-tune (all 12 ViT blocks, not just the last 3) + cosine LR
+schedule, on a combined dataset of 13 legally-clean generators plus the 5
+ToS-restricted generators `v2` originally trained on, re-collected after
+`v2`'s original raw training data was lost (see
+`research/finetuning/combined-v3-results.md` and
+`research/finetuning/full-unfreeze-legal-results.md` on the
+`research/detector-finetuning` branch for the full methodology,
+intermediate experiments, and root-cause writeups).
+
+**Comparison at matched real-photo safety** (v2's actual deployed
+behavior at its 0.8 verdict threshold, 94.7% real-photo accuracy - not
+v2's raw unthresholded 90.1% figure, a distinction that matters and was
+initially conflated during this deployment's own threshold calibration
+before being caught and corrected):
+
+| | v2 (deployed @ 0.8) | v3 (deployed @ 0.996) |
+|---|---:|---:|
+| Real-photo accuracy | 94.7% | 94.2% |
+| AI recall | 76.0% | 82.3% |
+| Overall accuracy | 85.4% | 88.0% |
+
+A real, but more modest improvement than a same-threshold (0.5-vs-0.5)
+comparison would suggest - `v3`'s score distribution is markedly more
+saturated near 0/1 than `v2`'s was (e.g. ~10% of real photos already
+score above 0.95), so its verdict thresholds
+(`src/lib/verdict.ts`) needed independent recalibration against a real
+false-positive sweep, not a naive carry-over of `v2`'s 0.4/0.8 cutoffs -
+see that file's comment for the full calibration record, including a
+specific fixture (`midjourney-known-ai.jpg`) that directly constrained
+the final threshold choice.
+
+**Known regression**: one real-photo test fixture
+(`E-sig-CA.jpg`, a broken-C2PA-signature edge case - see
+`src/lib/detection/__fixtures__/README.md`) moved from a confident
+correct "likely-real" under `v2` to "possibly-ai" under `v3` - a real,
+disclosed instance of the checkpoint's real-photo error tail, not
+silently accepted.
+
+Deployed as `gs://pixeltruth-0700-models/commfor-384/v3.onnx`.
