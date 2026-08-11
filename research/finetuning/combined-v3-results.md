@@ -91,22 +91,54 @@ combining them was the right call rather than either alone.
 
 ## What this means
 
-- **This checkpoint (deployed at threshold ~0.95, not the default 0.5) is
-  the new best candidate for production**, superseding FT1 (`v2`) on
-  every metric measured. The threshold needs deliberate tuning as part
-  of deployment - it can't simply replace `v2.onnx` behind the existing
-  `score >= 0.5` decision logic in `src/lib/detection/communityForensics.ts`
-  and `src/lib/verdict.ts` without also updating the threshold there,
-  or real-photo accuracy will regress by 10 points.
+- **This checkpoint is the new best candidate for production**,
+  superseding FT1 (`v2`) - deployed as `v3.onnx`. The threshold needs
+  deliberate tuning as part of deployment - it can't simply replace
+  `v2.onnx` behind the existing decision logic without also updating the
+  threshold in `src/lib/verdict.ts`, or real-photo accuracy regresses
+  substantially. See the correction below for the actual deployed
+  numbers, which differ from the 0.95-threshold table above.
 - Same licensing-risk profile as FT1: this checkpoint was trained
   directly on GPT Image 1.5/Gemini/Flux Pro/SD 3.5/Seedream output under
   the same accepted-legal-ambiguity stance, now with more volume (800/
   generator vs whatever FT1 originally used). The "resolve licensing in
   parallel" thread from FT1's deployment is still open and applies
   equally here.
-- Worth checking whether an even higher or lower threshold than 0.95
-  gives a better tradeoff for the product's actual use case (a public
-  detector where both false accusations of real photos and missed AI
-  content have real costs) - 0.95 was chosen here specifically to match
-  FT1 for comparability, not because it's necessarily the ideal
-  operating point.
+
+## Correction: the 0.95-threshold comparison above understated FT1's real baseline
+
+The comparison table above matched this checkpoint's threshold to FT1's
+**raw, unthresholded** real-photo accuracy (90.1% at the model's native
+0.5 sigmoid output) - but FT1 was never actually deployed at 0.5. Per
+`detector-benchmark-notes.md`'s own threshold-sweep section, FT1 was
+deployed with `verdict.ts`'s "likely-ai" cutoff at 0.8, which achieves
+94.7% real-photo accuracy / 76.0% AI recall / 85.4% overall - a
+meaningfully better real-world baseline than the 90.1% figure used above.
+This was caught during the actual deployment work (see `main`'s deploy
+commit), not before, so this doc is left uncorrected above and amended
+here rather than quietly rewritten.
+
+**The real, matched-threshold comparison** (this checkpoint at 0.996,
+chosen to land close to FT1's actual deployed real-photo accuracy while
+keeping a specific "should always score high" test fixture inside the
+likely-ai tier - see `verdict.ts`'s comment for the exact reasoning):
+
+| | FT1 (deployed @ 0.8) | **Combined v3 (deployed @ 0.996)** |
+|---|---:|---:|
+| Real-photo accuracy | 94.7% | 94.2% |
+| AI recall | 76.0% | 82.3% |
+| Overall accuracy | 85.4% | 88.0% |
+
+Still a real, genuine win (+6.3 points AI recall at essentially matched
+real-photo safety), but smaller than the earlier table implied, and not
+literally "every axis improved" - real-photo accuracy is 0.5 points
+*below* FT1's deployed figure, not above it. The independent-levers
+conclusion (training recipe + data coverage compound rather than
+substitute) still holds; the magnitude was overstated.
+
+One concrete fixture-level instance of the real-photo cost:
+`src/lib/detection/__fixtures__/E-sig-CA.jpg` (a real photo with a
+deliberately broken C2PA signature) moved from a confident correct
+"likely-real" under FT1 to "possibly-ai" under this checkpoint - not the
+worse "likely-ai" outcome, but a real regression on a specific,
+previously-reliable edge case. See that fixture's README entry.
