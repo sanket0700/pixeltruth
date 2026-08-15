@@ -36,7 +36,7 @@ jobs:
       # `firebase emulators:exec`. ubuntu-latest usually ships one already,
       # but pin it explicitly rather than depend on runner-image defaults
       # that can change.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
